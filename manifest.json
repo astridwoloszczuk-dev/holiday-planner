@@ -1,0 +1,9 @@
+{
+  "name": "Family Holidays",
+  "short_name": "Holidays",
+  "description": "Plan and track family holidays",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#0369a1"
+}

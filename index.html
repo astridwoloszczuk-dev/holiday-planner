@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0369a1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Family Holidays</title>
+  <link rel="manifest" href="./manifest.json" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:      #0369a1;
+      --blue-lt:   #e0f2fe;
+      --blue-dk:   #075985;
+      --green:     #16a34a;
+      --green-lt:  #dcfce7;
+      --amber:     #d97706;
+      --amber-lt:  #fef3c7;
+      --red:       #dc2626;
+      --red-lt:    #fee2e2;
+      --violet:    #7c3aed;
+      --violet-lt: #ede9fe;
+      --gray-50:   #f9fafb;
+      --gray-100:  #f3f4f6;
+      --gray-200:  #e5e7eb;
+      --gray-400:  #9ca3af;
+      --gray-600:  #4b5563;
+      --gray-900:  #111827;
+      --tab-h:     56px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      min-height: 100dvh;
+    }
+    body.has-tabs {
+      padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom));
+    }
+
+    .hidden { display: none !important; }
+
+    /* ── Shared header ── */
+    header {
+      position: sticky; top: 0; z-index: 10;
+      height: 56px;
+      display: flex; align-items: center;
+      padding: 0 16px;
+      color: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    header.blue   { background: var(--blue); }
+    header.detail { background: var(--blue-dk); gap: 10px; }
+    .app-title  { font-size: 1.1rem; font-weight: 700; flex: 1; }
+    .back-btn {
+      width: 36px; height: 36px; border-radius: 8px;
+      border: none; background: rgba(255,255,255,.15);
+      color: white; cursor: pointer; font-size: 1.1rem;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background .15s;
+    }
+    .back-btn:hover { background: rgba(255,255,255,.25); }
+    #detail-title {
+      flex: 1; font-size: 1rem; font-weight: 700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* ── Home screen ── */
+    #screen-home main { padding: 14px 16px 88px; }
+
+    .home-section-label {
+      font-size: .72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: var(--gray-400); padding: 10px 0 6px;
+    }
+
+    /* ── Holiday banner ── */
+    .holiday-banner {
+      background: white; border-radius: 14px;
+      margin-bottom: 10px; padding: 16px;
+      display: flex; align-items: center; gap: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+      cursor: pointer; border-left: 4px solid var(--gray-200);
+      transition: box-shadow .15s, transform .1s;
+      animation: slideIn .12s ease;
+    }
+    .holiday-banner:active { transform: scale(.99); }
+    .holiday-banner:hover { box-shadow: 0 3px 10px rgba(0,0,0,.1); }
+    .holiday-banner.upcoming { border-left-color: var(--blue); }
+    .holiday-banner.current  { border-left-color: var(--green); }
+    .holiday-banner.idea     { border-left-color: var(--violet); }
+    .holiday-banner.past     { border-left-color: var(--gray-200); opacity: .7; }
+
+    .banner-emoji { font-size: 2rem; flex-shrink: 0; }
+    .banner-info  { flex: 1; min-width: 0; }
+    .banner-name  { font-size: 1rem; font-weight: 700; margin-bottom: 2px;
+                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .banner-dest  { font-size: .82rem; color: var(--gray-600); margin-bottom: 2px; }
+    .banner-dates { font-size: .75rem; color: var(--gray-400); }
+
+    .banner-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+    .countdown-badge {
+      font-size: .72rem; font-weight: 700; padding: 3px 9px;
+      border-radius: 999px; background: var(--blue-lt); color: var(--blue);
+      white-space: nowrap;
+    }
+    .countdown-badge.today { background: var(--green-lt); color: var(--green); }
+    .status-badge {
+      font-size: .65rem; font-weight: 700; padding: 2px 7px;
+      border-radius: 999px; white-space: nowrap; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .status-badge.idea     { background: var(--violet-lt); color: var(--violet); }
+    .status-badge.current  { background: var(--green-lt);  color: var(--green); }
+    .chevron { width: 16px; height: 16px; color: var(--gray-400); }
+
+    /* ── Detail tab bar ── */
+    #detail-tab-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: calc(var(--tab-h) + env(safe-area-inset-bottom));
+      padding-bottom: env(safe-area-inset-bottom);
+      background: white; border-top: 1px solid var(--gray-200);
+      display: flex; z-index: 20;
+    }
+    .detail-tab-btn {
+      flex: 1; border: none; background: transparent;
+      font-size: .62rem; font-weight: 500; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 2px; padding: 0;
+      color: var(--gray-400); transition: color .15s;
+    }
+    .detail-tab-btn .tab-icon { font-size: 1.2rem; }
+    .detail-tab-btn.active { color: var(--blue); font-weight: 700; }
+
+    /* ── Tab panels ── */
+    .tab-panel { padding: 14px 16px 16px; }
+
+    /* ── Section label ── */
+    .section-label {
+      font-size: .7rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: var(--gray-400); padding: 12px 0 5px;
+    }
+    .section-label.highlight { color: var(--amber); }
+    .section-label.urgent    { color: var(--red); }
+
+    /* ── Plan tab ── */
+    .plan-actions { display: flex; gap: 8px; margin-bottom: 14px; }
+
+    /* ── Day card ── */
+    .day-card {
+      background: white; border-radius: 14px;
+      margin-bottom: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+      animation: slideIn .12s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .day-header {
+      background: var(--blue); color: white;
+      padding: 10px 14px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .day-label { font-size: .7rem; font-weight: 700; text-transform: uppercase;
+                 letter-spacing: .08em; opacity: .8; }
+    .day-date  { font-size: .9rem; font-weight: 700; }
+
+    .slot {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .slot:last-of-type { border-bottom: none; }
+    .slot-header {
+      display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+    }
+    .slot-icon  { font-size: .95rem; flex-shrink: 0; }
+    .slot-name  { font-size: .75rem; font-weight: 700; text-transform: uppercase;
+                  letter-spacing: .05em; color: var(--gray-600); flex: 1; }
+    .slot-status-badge {
+      font-size: .65rem; font-weight: 700; padding: 2px 8px;
+      border-radius: 999px; border: none; cursor: pointer;
+      transition: opacity .1s;
+    }
+    .slot-status-badge:hover { opacity: .75; }
+    .slot-status-badge.planned { background: var(--green-lt);  color: var(--green); }
+    .slot-status-badge.to_book { background: var(--amber-lt);  color: var(--amber); }
+    .slot-status-badge.free    { background: var(--gray-100);  color: var(--gray-400); }
+
+    .slot-text  { font-size: .88rem; color: var(--gray-900); line-height: 1.4; }
+    .slot-empty { font-size: .82rem; color: var(--gray-400); font-style: italic; }
+
+    .day-accom {
+      padding: 8px 14px;
+      font-size: .78rem;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .day-accom.changed {
+      background: var(--blue-lt); color: var(--blue); font-weight: 600;
+    }
+    .day-accom.same { color: var(--gray-400); }
+
+    /* ── Generic list card ── */
+    .list-card {
+      background: white; border-radius: 12px;
+      margin-bottom: 8px; padding: 12px 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+      animation: slideIn .12s ease;
+    }
+    .card-main { display: flex; align-items: flex-start; gap: 10px; }
+    .status-icon, .type-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+    .card-info { flex: 1; min-width: 0; }
+    .card-title { font-size: .92rem; font-weight: 600; }
+    .card-meta  { font-size: .75rem; color: var(--gray-400); margin-top: 2px; }
+    .card-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+    .status-select {
+      font-size: .72rem; border: 1.5px solid var(--gray-200);
+      border-radius: 8px; padding: 3px 6px; background: white;
+      font-family: inherit; color: var(--gray-900); cursor: pointer;
+      outline: none;
+    }
+    .del-btn-sm {
+      border: none; background: transparent; cursor: pointer;
+      font-size: .9rem; opacity: 0; transition: opacity .15s;
+      padding: 2px;
+    }
+    .list-card:hover .del-btn-sm { opacity: 1; }
+    @media (hover: none) { .del-btn-sm { opacity: .3; } }
+
+    /* ── Packing cards ── */
+    .packing-actions { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+
+    .packing-card {
+      background: white; border-radius: 12px;
+      margin-bottom: 6px; padding: 10px 12px;
+      display: flex; align-items: flex-start; gap: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+      transition: opacity .15s;
+      animation: slideIn .12s ease;
+    }
+    .packing-card.non-obvious { border-left: 3px solid var(--amber); }
+    .packing-card.checked { opacity: .5; }
+
+    .check-circle {
+      width: 24px; height: 24px; min-width: 24px;
+      border-radius: 50%; border: 2px solid var(--gray-200);
+      background: white; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .75rem; font-weight: 700; color: white;
+      transition: all .15s; flex-shrink: 0; margin-top: 1px;
+    }
+    .check-circle.done { background: var(--green); border-color: var(--green); }
+    .check-circle:hover { border-color: var(--green); }
+
+    .packing-info { flex: 1; min-width: 0; }
+    .packing-name { font-size: .9rem; font-weight: 500; display: block; }
+    .packing-name.strikethrough { text-decoration: line-through; color: var(--gray-400); }
+    .packing-reason { font-size: .75rem; color: var(--amber); display: block; margin-top: 2px; font-style: italic; }
+    .packing-person { font-size: .68rem; color: var(--gray-400); display: block; margin-top: 2px; }
+
+    /* ── Weather ── */
+    .weather-location {
+      font-size: .85rem; font-weight: 600; color: var(--gray-600);
+      margin-bottom: 12px;
+    }
+    .weather-days {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .weather-day {
+      background: white; border-radius: 12px; padding: 12px 10px;
+      text-align: center; min-width: 70px; flex: 1;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .weather-day-name { font-size: .65rem; font-weight: 600; color: var(--gray-400);
+                        text-transform: uppercase; margin-bottom: 4px; }
+    .weather-day-icon { font-size: 1.6rem; margin: 4px 0; }
+    .weather-temps { display: flex; justify-content: center; gap: 6px; font-size: .82rem; font-weight: 700; }
+    .temp-max { color: var(--red); }
+    .temp-min { color: var(--blue); }
+    .weather-rain { font-size: .65rem; color: var(--blue); margin-top: 3px; }
+    .weather-unavailable {
+      background: white; border-radius: 14px; padding: 28px 20px;
+      text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .weather-icon-big { font-size: 3rem; margin-bottom: 12px; }
+    .weather-unavailable-msg { font-size: .88rem; color: var(--gray-600); line-height: 1.6; }
+    .weather-unavailable-msg .muted { color: var(--gray-400); font-size: .8rem; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center; padding: 48px 24px; color: var(--gray-400);
+    }
+    .empty-state.small { padding: 20px 24px; }
+    .empty-icon { font-size: 2.5rem; margin-bottom: 10px; }
+    .empty-state p { font-size: .88rem; margin-bottom: 14px; }
+    .loading {
+      text-align: center; padding: 40px; color: var(--gray-400); font-size: .9rem;
+    }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      background: var(--blue); color: white; border: none;
+      border-radius: 10px; padding: 10px 16px;
+      font-size: .88rem; font-weight: 600; font-family: inherit;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-primary:hover { background: var(--blue-dk); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+    .btn-secondary {
+      background: white; color: var(--gray-600);
+      border: 1.5px solid var(--gray-200);
+      border-radius: 10px; padding: 10px 16px;
+      font-size: .88rem; font-weight: 600; font-family: inherit;
+      cursor: pointer; transition: border-color .15s;
+    }
+    .btn-secondary:hover { border-color: var(--blue); color: var(--blue); }
+
+    .fab-inline {
+      display: inline-flex; align-items: center;
+      background: var(--blue-lt); color: var(--blue);
+      border: none; border-radius: 10px; padding: 9px 14px;
+      font-size: .85rem; font-weight: 600; font-family: inherit;
+      cursor: pointer; margin-bottom: 4px; transition: background .15s;
+    }
+    .fab-inline:hover { background: #bae6fd; }
+
+    /* ── Home FAB ── */
+    #fab-home {
+      position: fixed;
+      bottom: 24px; right: 16px;
+      width: 52px; height: 52px; border-radius: 50%;
+      background: var(--blue); color: white; border: none;
+      font-size: 1.7rem; cursor: pointer;
+      box-shadow: 0 4px 14px rgba(3,105,161,.45);
+      z-index: 15; transition: background .15s, transform .1s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #fab-home:hover  { background: var(--blue-dk); transform: scale(1.06); }
+    #fab-home:active { transform: scale(.95); }
+
+    /* ── Modals ── */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      display: flex; align-items: flex-end; justify-content: center;
+      z-index: 100;
+    }
+    .modal {
+      background: white; border-radius: 20px 20px 0 0;
+      padding: 24px 20px calc(28px + env(safe-area-inset-bottom));
+      width: 100%; max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 -8px 40px rgba(0,0,0,.2);
+    }
+    @media (min-width: 520px) {
+      .modal-backdrop { align-items: center; padding: 24px; }
+      .modal { border-radius: 20px; max-width: 460px; padding: 28px; }
+    }
+    .modal h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 18px; }
+
+    /* ── Form fields ── */
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block; font-size: .72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: var(--gray-400); margin-bottom: 5px;
+    }
+    .field input, .field select, .field textarea {
+      width: 100%; border: 1.5px solid var(--gray-200); border-radius: 10px;
+      padding: 10px 14px; font-size: .95rem; font-family: inherit;
+      outline: none; background: var(--gray-50); color: var(--gray-900);
+      transition: border-color .15s;
+    }
+    .field textarea { resize: vertical; min-height: 120px; }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      border-color: var(--blue); background: white;
+    }
+    .field-row { display: flex; gap: 10px; }
+    .field-row .field { flex: 1; }
+
+    .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+    .modal-cancel {
+      flex: 1; padding: 12px; border: 1.5px solid var(--gray-200);
+      border-radius: 10px; background: white; font-size: .95rem;
+      font-weight: 600; cursor: pointer; color: var(--gray-600); font-family: inherit;
+    }
+    .modal-save {
+      flex: 2; padding: 12px; border: none; border-radius: 10px;
+      background: var(--blue); color: white; font-size: .95rem;
+      font-weight: 600; cursor: pointer; font-family: inherit; transition: background .15s;
+    }
+    .modal-save:hover { background: var(--blue-dk); }
+    .modal-save:disabled { opacity: .5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+  <!-- ── HOME SCREEN ─────────────────────────────────────────────── -->
+  <div id="screen-home">
+    <header class="blue">
+      <div class="app-title">🌍 Family Holidays</div>
+    </header>
+    <main>
+      <div id="holiday-list"></div>
+    </main>
+    <button id="fab-home" aria-label="Add holiday">+</button>
+  </div>
+
+  <!-- ── DETAIL SCREEN ───────────────────────────────────────────── -->
+  <div id="screen-detail" class="hidden">
+    <header class="detail">
+      <button id="back-btn" class="back-btn" aria-label="Back">←</button>
+      <div id="detail-title"></div>
+    </header>
+
+    <div id="panel-plan"    class="tab-panel"        data-tab="plan"></div>
+    <div id="panel-docs"    class="tab-panel hidden" data-tab="docs"></div>
+    <div id="panel-packing" class="tab-panel hidden" data-tab="packing"></div>
+    <div id="panel-todo"    class="tab-panel hidden" data-tab="todo"></div>
+    <div id="panel-weather" class="tab-panel hidden" data-tab="weather"></div>
+
+    <nav id="detail-tab-bar"></nav>
+  </div>
+
+  <!-- ── MODAL: Add holiday ──────────────────────────────────────── -->
+  <div id="modal-add-holiday" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>Add Holiday</h2>
+      <div class="field">
+        <label>Name</label>
+        <input id="h-name" type="text" placeholder="e.g. Summer Mallorca 2026" autocomplete="off" />
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Destination</label>
+          <input id="h-dest" type="text" placeholder="City / Region" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label>Country</label>
+          <input id="h-country" type="text" placeholder="Spain" autocomplete="off" />
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Emoji</label>
+          <input id="h-emoji" type="text" placeholder="✈️" maxlength="4" />
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select id="h-status">
+            <option value="idea">💡 Idea</option>
+            <option value="upcoming" selected>✈️ Upcoming</option>
+            <option value="current">🌴 Current</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Departure</label>
+          <input id="h-depart" type="date" />
+        </div>
+        <div class="field">
+          <label>Return</label>
+          <input id="h-return" type="date" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-cancel" onclick="closeModal('modal-add-holiday')">Cancel</button>
+        <button class="modal-save"   onclick="saveHoliday()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: Paste itinerary ─────────────────────────────────── -->
+  <div id="modal-paste" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>📋 Itinerary text</h2>
+      <div class="field">
+        <label>Paste your itinerary (from email, PDF, travel agent doc…)</label>
+        <textarea id="itinerary-textarea" placeholder="Paste the full itinerary text here. Claude will structure it into day-by-day slots."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-cancel" onclick="closeModal('modal-paste')">Cancel</button>
+        <button class="modal-save" id="parse-btn" onclick="submitPaste()">✨ Parse with Claude</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: Add document ────────────────────────────────────── -->
+  <div id="modal-add-doc" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>📋 Add Document</h2>
+      <div class="field">
+        <label>Document</label>
+        <input id="doc-title" type="text" placeholder="e.g. Passport renewal, Travel insurance…" autocomplete="off" />
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Type</label>
+          <select id="doc-type">
+            <option value="passport">Passport</option>
+            <option value="visa">Visa</option>
+            <option value="insurance">Insurance</option>
+            <option value="other" selected>Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>For</label>
+          <select id="doc-person">
+            <option value="all">Everyone</option>
+            <option>Astrid</option>
+            <option>Niko</option>
+            <option>Max</option>
+            <option>Alex</option>
+            <option>Vicky</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Notes (optional)</label>
+        <input id="doc-notes" type="text" placeholder="e.g. Needs 6 months validity" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label>Deadline (optional)</label>
+        <input id="doc-deadline" type="date" />
+      </div>
+      <div class="modal-actions">
+        <button class="modal-cancel" onclick="closeModal('modal-add-doc')">Cancel</button>
+        <button class="modal-save"   onclick="saveDoc()">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: Add packing item ────────────────────────────────── -->
+  <div id="modal-add-packing" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>🎒 Add Packing Item</h2>
+      <div class="field">
+        <label>Item</label>
+        <input id="pack-item" type="text" placeholder="What to pack…" autocomplete="off" />
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Category</label>
+          <select id="pack-category">
+            <option value="clothing">👗 Clothing</option>
+            <option value="toiletries">🧴 Toiletries</option>
+            <option value="documents">📄 Documents</option>
+            <option value="gear">🎒 Gear</option>
+            <option value="beach">🏖️ Beach</option>
+            <option value="health">💊 Health</option>
+            <option value="kids">👧 Kids</option>
+            <option value="misc" selected>📦 Misc</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>For</label>
+          <select id="pack-person">
+            <option value="all">Everyone</option>
+            <option>Astrid</option>
+            <option>Niko</option>
+            <option>Max</option>
+            <option>Alex</option>
+            <option>Vicky</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Why? (non-obvious reason)</label>
+        <input id="pack-reason" type="text" placeholder="Optional — why this is easy to forget" autocomplete="off" />
+      </div>
+      <div class="modal-actions">
+        <button class="modal-cancel" onclick="closeModal('modal-add-packing')">Cancel</button>
+        <button class="modal-save"   onclick="savePacking()">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: Add ancillary ───────────────────────────────────── -->
+  <div id="modal-add-ancillary" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>✅ Add To-Do</h2>
+      <div class="field">
+        <label>Name</label>
+        <input id="anc-name" type="text" placeholder="e.g. Book dinner at Es Fum…" autocomplete="off" />
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Type</label>
+          <select id="anc-type">
+            <option value="restaurant">🍽️ Restaurant</option>
+            <option value="activity" selected>🎯 Activity</option>
+            <option value="spa">💆 Spa</option>
+            <option value="transfer">🚗 Transfer</option>
+            <option value="hotel">🏨 Hotel</option>
+            <option value="flight">✈️ Flight</option>
+            <option value="other">📌 Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select id="anc-status">
+            <option value="to_book" selected>To book</option>
+            <option value="considering">Considering</option>
+            <option value="booked">Booked ✅</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Date (optional)</label>
+          <input id="anc-date" type="date" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Notes (optional)</label>
+        <input id="anc-notes" type="text" placeholder="Link, contact, details…" autocomplete="off" />
+      </div>
+      <div class="modal-actions">
+        <button class="modal-cancel" onclick="closeModal('modal-add-ancillary')">Cancel</button>
+        <button class="modal-save"   onclick="saveAncillary()">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
