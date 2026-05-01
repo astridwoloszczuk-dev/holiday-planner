@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0369a1"/>
+  <!-- Globe -->
+  <circle cx="256" cy="248" r="140" fill="none" stroke="white" stroke-width="16"/>
+  <!-- Latitude lines -->
+  <ellipse cx="256" cy="248" rx="60" ry="140" fill="none" stroke="white" stroke-width="12"/>
+  <line x1="116" y1="248" x2="396" y2="248" stroke="white" stroke-width="12"/>
+  <line x1="130" y1="188" x2="382" y2="188" stroke="white" stroke-width="10"/>
+  <line x1="130" y1="308" x2="382" y2="308" stroke="white" stroke-width="10"/>
+  <!-- Plane -->
+  <g transform="translate(256,248) rotate(-35) translate(-36,-36) scale(1.15)">
+    <path d="M52 4 L68 36 L44 32 L36 52 L24 44 L32 24 L8 20 Z" fill="white"/>
+    <path d="M28 44 L20 60 L32 56 L36 52Z" fill="white"/>
+    <path d="M52 28 L72 24 L68 36Z" fill="white"/>
+  </g>
+</svg>
