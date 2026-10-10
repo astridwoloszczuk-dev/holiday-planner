@@ -1,4 +1,4 @@
-const CACHE = 'holidays-v1';
+const CACHE = 'holidays-v2';
 const SHELL = ['./', './app.js', 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js'];
 
 self.addEventListener('install', e => {
@@ -11,7 +11,19 @@ self.addEventListener('activate', e => {
       .then(() => self.clients.claim())
   );
 });
+// Network first, cache as the offline fallback — so a deployed change shows up
+// on the next open instead of being pinned to whatever was cached at install.
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+  e.respondWith(
+    fetch(e.request)
+      .then(r => {
+        if (r.ok && e.request.url.startsWith(self.location.origin)) {
+          const copy = r.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy));
+        }
+        return r;
+      })
+      .catch(() => caches.match(e.request))
+  );
 });
