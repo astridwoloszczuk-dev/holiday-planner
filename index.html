@@ -148,6 +148,23 @@
     .section-label.highlight { color: var(--amber); }
     .section-label.urgent    { color: var(--red); }
 
+    /* ── Trip info (notes + links) ── */
+    .trip-info {
+      background: white; border-radius: 14px; padding: 14px 16px;
+      margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .trip-info-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .trip-info-head .fab-inline { margin: 0; padding: 7px 11px; font-size: .78rem; }
+    .trip-info-dest  { font-size: .95rem; font-weight: 700; }
+    .trip-info-dates { font-size: .8rem; color: var(--gray-600); margin-top: 2px; }
+    .trip-notes { margin-top: 10px; font-size: .9rem; line-height: 1.5; color: var(--gray-900); }
+    .trip-notes p  { margin: 0 0 8px; }
+    .trip-notes ul { margin: 0 0 8px 18px; }
+    .trip-notes li { margin-bottom: 3px; }
+    .trip-notes a  { color: var(--blue); font-weight: 600; text-decoration: none; word-break: break-all; }
+    .trip-notes a:hover { text-decoration: underline; }
+    .section-count { font-weight: 500; color: var(--gray-400); margin-left: 4px; }
+
     /* ── Plan tab ── */
     .plan-actions { display: flex; gap: 8px; margin-bottom: 14px; }
 
@@ -493,6 +510,21 @@
     </div>
   </div>
 
+  <!-- ── MODAL: Trip notes ──────────────────────────────────────── -->
+  <div id="modal-notes" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>🧭 Trip notes</h2>
+      <div class="field">
+        <label>The essentials + links (readable offline)</label>
+        <textarea id="notes-textarea" style="min-height:220px" placeholder="Hotel, flights, who's coming, the links…&#10;&#10;URLs become tappable. Lines starting with '- ' become bullets."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-cancel" onclick="closeModal('modal-notes')">Cancel</button>
+        <button class="modal-save"   onclick="saveNotes()">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── MODAL: Add document ────────────────────────────────────── -->
   <div id="modal-add-doc" class="modal-backdrop hidden">
     <div class="modal">
@@ -541,10 +573,10 @@
   <!-- ── MODAL: Add packing item ────────────────────────────────── -->
   <div id="modal-add-packing" class="modal-backdrop hidden">
     <div class="modal">
-      <h2>🎒 Add Packing Item</h2>
+      <h2>🎒 Add Packing Items</h2>
       <div class="field">
-        <label>Item</label>
-        <input id="pack-item" type="text" placeholder="What to pack…" autocomplete="off" />
+        <label>Items — one per line</label>
+        <textarea id="pack-items" style="min-height:140px" placeholder="Thermal underwear ×3&#10;Ski pants (check they still fit)&#10;Ski socks ×4&#10;Helmet"></textarea>
       </div>
       <div class="field-row">
         <div class="field">
@@ -571,10 +603,6 @@
             <option>Vicky</option>
           </select>
         </div>
-      </div>
-      <div class="field">
-        <label>Why? (non-obvious reason)</label>
-        <input id="pack-reason" type="text" placeholder="Optional — why this is easy to forget" autocomplete="off" />
       </div>
       <div class="modal-actions">
         <button class="modal-cancel" onclick="closeModal('modal-add-packing')">Cancel</button>

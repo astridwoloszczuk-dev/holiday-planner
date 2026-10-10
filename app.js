@@ -7,6 +7,7 @@ const SLOT_SLOTS = ['morning', 'lunch', 'afternoon', 'evening'];
 const SLOT_ICONS = { morning: '🌅', lunch: '🍽️', afternoon: '☀️', evening: '🌙' };
 const CAT_EMOJIS = { clothing: '👗', toiletries: '🧴', documents: '📄', gear: '🎒', beach: '🏖️', health: '💊', kids: '👧', misc: '📦' };
 const ANC_ICONS  = { restaurant: '🍽️', activity: '🎯', spa: '💆', transfer: '🚗', hotel: '🏨', flight: '✈️', other: '📌' };
+const PEOPLE     = ['Astrid', 'Niko', 'Max', 'Alex', 'Vicky'];
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const { createClient } = supabase;
@@ -239,20 +240,54 @@ function setDetailTab(tab) {
 
 // ── PLAN TAB ──────────────────────────────────────────────────────────────────
 
+// Notes are the trip's "one place": a short offline-readable summary with the links
+// out (artifact, travel agent's Drive folder, hotel). Plain text; URLs become links,
+// "- " lines become bullets, blank lines separate paragraphs.
+function renderNotes(text) {
+  if (!text) return '';
+  const link = s => escHtml(s).replace(/https?:\/\/[^\s<]+/g, u => {
+    const label = u.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    return `<a href="${u}" target="_blank" rel="noopener">${label.length > 48 ? label.slice(0, 45) + '…' : label}</a>`;
+  });
+  return text.split(/\n{2,}/).map(block => {
+    const lines = block.split('\n');
+    if (lines.every(l => /^\s*-\s+/.test(l))) {
+      return `<ul>${lines.map(l => `<li>${link(l.replace(/^\s*-\s+/, ''))}</li>`).join('')}</ul>`;
+    }
+    return `<p>${lines.map(link).join('<br>')}</p>`;
+  }).join('');
+}
+
 function renderPlan() {
   const panel = document.getElementById('panel-plan');
+  const h = state.holiday;
+  const dates = h.depart_date
+    ? `${formatDate(h.depart_date)}${h.return_date ? ' – ' + formatDate(h.return_date) : ''}`
+    : 'No dates yet';
+
+  const infoHtml = `
+    <div class="trip-info">
+      <div class="trip-info-head">
+        <div>
+          <div class="trip-info-dest">${escHtml(h.destination)}${h.country ? ', ' + escHtml(h.country) : ''}</div>
+          <div class="trip-info-dates">${dates}</div>
+        </div>
+        <button class="fab-inline" onclick="openNotes()">✏️ Edit</button>
+      </div>
+      ${h.notes ? `<div class="trip-notes">${renderNotes(h.notes)}</div>`
+                : `<div class="slot-empty">No notes yet — add the links and the essentials here.</div>`}
+    </div>`;
 
   if (!state.days.length) {
-    panel.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">📋</div>
-        <p>No itinerary yet. Paste your travel document and Claude will structure it.</p>
-        <button class="btn-primary" onclick="openModal('modal-paste')">Paste itinerary</button>
+    panel.innerHTML = infoHtml + `
+      <div class="empty-state small">
+        <p>No day-by-day plan. Paste an itinerary and Claude will structure it.</p>
+        <button class="btn-secondary" onclick="openModal('modal-paste')">Paste itinerary</button>
       </div>`;
     return;
   }
 
-  panel.innerHTML = `
+  panel.innerHTML = infoHtml + `
     <div class="plan-actions">
       <button class="btn-secondary" onclick="openModal('modal-paste')">Re-paste itinerary</button>
     </div>
@@ -312,6 +347,22 @@ async function cycleSlotStatus(dayId, slot) {
   const next  = cycle[(cycle.indexOf(day[`${slot}_status`] || 'free') + 1) % 3];
   await db.from('holiday_days').update({ [`${slot}_status`]: next }).eq('id', dayId);
   day[`${slot}_status`] = next;
+  renderPlan();
+}
+
+// ── NOTES ─────────────────────────────────────────────────────────────────────
+
+function openNotes() {
+  document.getElementById('notes-textarea').value = state.holiday.notes || '';
+  openModal('modal-notes');
+}
+
+async function saveNotes() {
+  const notes = document.getElementById('notes-textarea').value.trim() || null;
+  const { error } = await db.from('holidays').update({ notes }).eq('id', state.holidayId);
+  if (error) { alert('Could not save — are you online?'); return; }
+  state.holiday.notes = notes;
+  closeModal('modal-notes');
   renderPlan();
 }
 
@@ -464,10 +515,19 @@ function renderPacking() {
       obvious.forEach(item => { html += packingCard(item); });
     });
 
-    if (manItems.length) {
-      html += `<div class="section-label">📝 Added by you</div>`;
-      manItems.forEach(item => { html += packingCard(item); });
-    }
+    // Your own list, grouped by person so each child can tick their own
+    const byPerson = {};
+    manItems.forEach(item => {
+      const key = item.person || 'all';
+      (byPerson[key] = byPerson[key] || []).push(item);
+    });
+    ['all', ...PEOPLE.filter(p => byPerson[p])].forEach(person => {
+      const items = byPerson[person];
+      if (!items) return;
+      const done = items.filter(i => i.checked).length;
+      html += `<div class="section-label">${person === 'all' ? '👨‍👩‍👧‍👦 Everyone' : '🙋 ' + person} <span class="section-count">${done}/${items.length}</span></div>`;
+      items.forEach(item => { html += packingCard(item); });
+    });
   }
 
   panel.innerHTML = html;
@@ -526,24 +586,25 @@ async function generatePacking() {
   }
 }
 
+// One item per line. "For" = everyone or one person; the list is grouped by person,
+// so paste the ski list once per child and they tick what they have / what fits.
 async function savePacking() {
-  const item     = document.getElementById('pack-item').value.trim();
+  const lines    = document.getElementById('pack-items').value.split('\n').map(s => s.trim()).filter(Boolean);
   const category = document.getElementById('pack-category').value;
-  const reason   = document.getElementById('pack-reason').value.trim();
   const person   = document.getElementById('pack-person').value;
-  if (!item) return;
+  if (!lines.length) return;
 
-  const { data } = await db.from('holiday_packing').insert({
+  const rows = lines.map(item => ({
     holiday_id: state.holidayId, item, category,
-    reason: reason || null, person, is_obvious: true, checked: false, ai_generated: false,
-  }).select().single();
+    reason: null, person, is_obvious: true, checked: false, ai_generated: false,
+  }));
+  const { data, error } = await db.from('holiday_packing').insert(rows).select();
+  if (error) { alert('Could not save — are you online?'); return; }
 
-  if (data) {
-    state.packing.push(data);
-    renderPacking();
-    closeModal('modal-add-packing');
-    ['pack-item','pack-reason'].forEach(id => { document.getElementById(id).value = ''; });
-  }
+  state.packing.push(...data);
+  renderPacking();
+  closeModal('modal-add-packing');
+  document.getElementById('pack-items').value = '';
 }
 
 // ── TO-DO TAB ─────────────────────────────────────────────────────────────────
@@ -736,10 +797,10 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
 
 // Build detail tab bar
 [
-  { id: 'plan',    icon: '📅', label: 'Plan' },
-  { id: 'docs',    icon: '📋', label: 'Docs' },
+  { id: 'plan',    icon: '🧭', label: 'Trip' },
   { id: 'packing', icon: '🎒', label: 'Packing' },
   { id: 'todo',    icon: '✅', label: 'To-Do' },
+  { id: 'docs',    icon: '📋', label: 'Docs' },
   { id: 'weather', icon: '☀️', label: 'Weather' },
 ].forEach(t => {
   const btn = document.createElement('button');
@@ -757,7 +818,7 @@ document.getElementById('back-btn').addEventListener('click', () => { location.h
 document.getElementById('fab-home').addEventListener('click', () => openModal('modal-add-holiday'));
 
 // Close modals on backdrop click
-['modal-add-holiday','modal-paste','modal-add-doc','modal-add-packing','modal-add-ancillary'].forEach(id => {
+['modal-add-holiday','modal-paste','modal-notes','modal-add-doc','modal-add-packing','modal-add-ancillary'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => { if (e.target.id === id) closeModal(id); });
 });
 
