@@ -95,14 +95,25 @@ async function loadHolidays() {
   renderHome();
 }
 
+// Booked holidays sort themselves by date: nobody has to flip upcoming → now → past.
+// 'idea' stays an idea until it gets dates and is marked booked.
+function effectiveStatus(h) {
+  if (h.status === 'idea' || !h.depart_date) return h.status;
+  const start = daysUntil(h.depart_date);
+  const end   = daysUntil(h.return_date || h.depart_date);
+  if (end < 0)    return 'past';
+  if (start <= 0) return 'current';
+  return 'upcoming';
+}
+
 function renderHome() {
   const list = document.getElementById('holiday-list');
   list.innerHTML = '';
 
-  const active = state.holidays.filter(h => h.status === 'current');
-  const upcoming = state.holidays.filter(h => h.status === 'upcoming');
-  const ideas  = state.holidays.filter(h => h.status === 'idea');
-  const past   = state.holidays.filter(h => h.status === 'past');
+  const active = state.holidays.filter(h => effectiveStatus(h) === 'current');
+  const upcoming = state.holidays.filter(h => effectiveStatus(h) === 'upcoming');
+  const ideas  = state.holidays.filter(h => effectiveStatus(h) === 'idea');
+  const past   = state.holidays.filter(h => effectiveStatus(h) === 'past').reverse();
 
   if (active.length) {
     const lbl = document.createElement('div');
@@ -146,18 +157,19 @@ function renderHome() {
 }
 
 function buildBanner(h) {
+  const status = effectiveStatus(h);
   const card = document.createElement('div');
-  card.className = `holiday-banner ${h.status}`;
+  card.className = `holiday-banner ${status}`;
 
   const days = h.depart_date ? daysUntil(h.depart_date) : null;
   let badge = '';
-  if (h.status === 'upcoming' && days !== null) {
+  if (status === 'upcoming' && days !== null) {
     const label = days === 0 ? 'Today!' : days === 1 ? 'Tomorrow' : `${days} days`;
     const cls   = days <= 1 ? 'today' : '';
     badge = `<span class="countdown-badge ${cls}">${label}</span>`;
   }
-  if (h.status === 'idea')    badge = `<span class="status-badge idea">Idea</span>`;
-  if (h.status === 'current') badge = `<span class="status-badge current">Now</span>`;
+  if (status === 'idea')    badge = `<span class="status-badge idea">Idea</span>`;
+  if (status === 'current') badge = `<span class="status-badge current">Now</span>`;
 
   const dateStr = h.depart_date
     ? `${formatDateShort(h.depart_date)}${h.return_date ? ' – ' + formatDateShort(h.return_date) : ''}`
