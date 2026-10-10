@@ -250,11 +250,19 @@ function renderNotes(text) {
     return `<a href="${u}" target="_blank" rel="noopener">${label.length > 48 ? label.slice(0, 45) + '…' : label}</a>`;
   });
   return text.split(/\n{2,}/).map(block => {
+    // Within a block: runs of "- " lines become a list, the other lines a paragraph.
+    // A single plain line right before a list reads as its heading.
     const lines = block.split('\n');
-    if (lines.every(l => /^\s*-\s+/.test(l))) {
-      return `<ul>${lines.map(l => `<li>${link(l.replace(/^\s*-\s+/, ''))}</li>`).join('')}</ul>`;
-    }
-    return `<p>${lines.map(link).join('<br>')}</p>`;
+    let out = '', para = [], list = [];
+    const flushPara = () => { if (para.length) { out += `<p>${para.map(link).join('<br>')}</p>`; para = []; } };
+    const flushList = () => { if (list.length) { out += `<ul>${list.map(l => `<li>${link(l)}</li>`).join('')}</ul>`; list = []; } };
+    lines.forEach(l => {
+      const m = l.match(/^\s*-\s+(.*)$/);
+      if (m) { if (para.length === 1 && !list.length) { out += `<p class="notes-head">${link(para[0])}</p>`; para = []; } flushPara(); list.push(m[1]); }
+      else   { flushList(); para.push(l); }
+    });
+    flushPara(); flushList();
+    return out;
   }).join('');
 }
 
