@@ -172,8 +172,7 @@
     /* ── Day card ── */
     .day-card {
       background: white; border-radius: 14px;
-      margin-bottom: 12px;
-      overflow: hidden;
+      margin-bottom: 10px; overflow: hidden;
       box-shadow: 0 1px 3px rgba(0,0,0,.06);
       animation: slideIn .12s ease;
     }
@@ -183,46 +182,42 @@
     }
     .day-header {
       background: var(--blue); color: white;
-      padding: 10px 14px;
+      padding: 8px 14px;
       display: flex; align-items: center; gap: 10px;
     }
-    .day-label { font-size: .7rem; font-weight: 700; text-transform: uppercase;
-                 letter-spacing: .08em; opacity: .8; }
-    .day-date  { font-size: .9rem; font-weight: 700; }
-
-    .slot {
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--gray-100);
-    }
-    .slot:last-of-type { border-bottom: none; }
-    .slot-header {
-      display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
-    }
-    .slot-icon  { font-size: .95rem; flex-shrink: 0; }
-    .slot-name  { font-size: .75rem; font-weight: 700; text-transform: uppercase;
-                  letter-spacing: .05em; color: var(--gray-600); flex: 1; }
-    .slot-status-badge {
-      font-size: .65rem; font-weight: 700; padding: 2px 8px;
-      border-radius: 999px; border: none; cursor: pointer;
-      transition: opacity .1s;
-    }
-    .slot-status-badge:hover { opacity: .75; }
-    .slot-status-badge.planned { background: var(--green-lt);  color: var(--green); }
-    .slot-status-badge.to_book { background: var(--amber-lt);  color: var(--amber); }
-    .slot-status-badge.free    { background: var(--gray-100);  color: var(--gray-400); }
-
-    .slot-text  { font-size: .88rem; color: var(--gray-900); line-height: 1.4; }
-    .slot-empty { font-size: .82rem; color: var(--gray-400); font-style: italic; }
-
+    .day-date  { font-size: .95rem; font-weight: 700; flex: 1; }
+    .day-dow   { opacity: .75; font-weight: 600; margin-right: 2px; }
+    .day-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; opacity: .75; }
+    .day-edit  { border: none; background: rgba(255,255,255,.18); color: white; border-radius: 8px;
+                 width: 28px; height: 28px; cursor: pointer; font-size: .9rem; }
     .day-accom {
-      padding: 8px 14px;
-      font-size: .78rem;
-      display: flex; align-items: center; gap: 6px;
+      padding: 8px 14px; font-size: .8rem; font-weight: 600;
+      background: var(--blue-lt); color: var(--blue);
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
     }
-    .day-accom.changed {
-      background: var(--blue-lt); color: var(--blue); font-weight: 600;
+    .day-nights { font-weight: 500; opacity: .8; }
+
+    .tl-row { display: flex; align-items: flex-start; gap: 8px; padding: 7px 14px; border-bottom: 1px solid var(--gray-100); }
+    .tl-row:last-child { border-bottom: none; }
+    .tl-dot {
+      width: 12px; height: 12px; min-width: 12px; border-radius: 50%; border: none; cursor: pointer;
+      margin-top: 5px; display: inline-block; padding: 0; vertical-align: middle;
     }
-    .day-accom.same { color: var(--gray-400); }
+    .tl-dot.planned { background: var(--green); }
+    .tl-dot.to_book { background: var(--amber); }
+    .tl-dot.free    { background: var(--gray-200); }
+    .tl-icon { font-size: .9rem; flex-shrink: 0; line-height: 1.5; }
+    .tl-text { font-size: .88rem; line-height: 1.45; color: var(--gray-900); }
+    .tl-empty { padding: 10px 14px; font-size: .82rem; color: var(--gray-400); font-style: italic; }
+    .day-note  { padding: 6px 14px 8px; font-size: .78rem; color: var(--gray-600); font-style: italic; border-top: 1px solid var(--gray-100); }
+    .day-links { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 14px 10px; }
+    .link-chip {
+      font-size: .74rem; font-weight: 600; color: var(--blue); background: var(--blue-lt);
+      border-radius: 999px; padding: 4px 10px; text-decoration: none; white-space: nowrap;
+    }
+    .plan-legend { font-size: .72rem; color: var(--gray-400); align-self: center; display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; }
+    .plan-legend .tl-dot { margin-top: 0; width: 9px; height: 9px; min-width: 9px; cursor: default; }
+    .plan-actions { flex-wrap: wrap; }
 
     /* ── Generic list card ── */
     .list-card {
@@ -548,6 +543,26 @@
       <div class="modal-actions">
         <button class="modal-cancel" onclick="closeModal('modal-notes')">Cancel</button>
         <button class="modal-save"   onclick="saveNotes()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: Edit day ───────────────────────────────────────── -->
+  <div id="modal-day-edit" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2 id="day-edit-title">Day</h2>
+      <div class="field-row">
+        <div class="field"><label>Where we sleep</label><input id="de-accom" type="text" placeholder="Hotel" autocomplete="off" /></div>
+        <div class="field"><label>Place</label><input id="de-city" type="text" placeholder="Town" autocomplete="off" /></div>
+      </div>
+      <div class="field"><label>🌅 Morning</label><textarea id="de-morning" style="min-height:56px"></textarea></div>
+      <div class="field"><label>🍽️ Lunch</label><textarea id="de-lunch" style="min-height:56px"></textarea></div>
+      <div class="field"><label>☀️ Afternoon</label><textarea id="de-afternoon" style="min-height:56px"></textarea></div>
+      <div class="field"><label>🌙 Evening</label><textarea id="de-evening" style="min-height:56px"></textarea></div>
+      <div class="field"><label>Notes + links (an artifact or ticket URL here becomes a chip)</label><textarea id="de-notes" style="min-height:70px"></textarea></div>
+      <div class="modal-actions">
+        <button class="modal-cancel" onclick="closeModal('modal-day-edit')">Cancel</button>
+        <button class="modal-save"   onclick="saveDayEdit()">Save</button>
       </div>
     </div>
   </div>

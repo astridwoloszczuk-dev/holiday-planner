@@ -298,53 +298,66 @@ function renderPlan() {
   panel.innerHTML = infoHtml + `
     <div class="plan-actions">
       <button class="btn-secondary" onclick="openModal('modal-paste')">Re-paste itinerary</button>
+      <span class="plan-legend"><i class="tl-dot planned"></i> booked <i class="tl-dot to_book"></i> idea / to book</span>
     </div>
     <div id="day-cards"></div>`;
 
   const container = document.getElementById('day-cards');
   let prevAccom = null;
-  state.days.forEach(day => {
+  state.days.forEach((day, i) => {
     const accomChanged = day.accommodation !== prevAccom;
     prevAccom = day.accommodation;
-    container.appendChild(buildDayCard(day, accomChanged));
+    let nights = 0;
+    for (let j = i; j < state.days.length && state.days[j].accommodation === day.accommodation; j++) nights++;
+    container.appendChild(buildDayCard(day, accomChanged, nights));
   });
 }
 
-function buildDayCard(day, accomChanged) {
-  const dayName = new Date(day.day_date + 'T00:00:00')
-    .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+// A day is one compact box: date, where we sleep (only when it changes), then
+// the filled slots as a timeline — a coloured dot per slot = its status (tap to
+// cycle), URLs in a slot or in the day notes become link chips at the foot
+// (a claude.ai artifact shows as "Artifact"). ✎ opens the day for editing.
+const URL_RE = /https?:\/\/[^\s<)]+/g;
 
-  const slotsHtml = SLOT_SLOTS.map(slot => {
-    const text   = day[slot] || '';
+function linkChip(u) {
+  const label = /claude\.ai\//.test(u) ? '📎 Artifact'
+              : u.replace(/^https?:\/\/(www\.)?/, '').split(/[/?#]/)[0];
+  return `<a class="link-chip" href="${escHtml(u)}" target="_blank" rel="noopener">${escHtml(label)}</a>`;
+}
+
+function stripUrls(text) { return (text || '').replace(URL_RE, '').replace(/\s{2,}/g, ' ').trim(); }
+
+function buildDayCard(day, accomChanged, nights) {
+  const d = new Date(day.day_date + 'T00:00:00');
+  const dow  = d.toLocaleDateString('en-GB', { weekday: 'short' });
+  const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+  const urls = [];
+  const rows = SLOT_SLOTS.filter(s => day[s]).map(slot => {
     const status = day[`${slot}_status`] || 'free';
-    const label  = { planned: 'Planned', to_book: 'To book', free: 'Free' }[status];
+    (day[slot].match(URL_RE) || []).forEach(u => urls.push(u));
     return `
-      <div class="slot ${status}">
-        <div class="slot-header">
-          <span class="slot-icon">${SLOT_ICONS[slot]}</span>
-          <span class="slot-name">${slot.charAt(0).toUpperCase() + slot.slice(1)}</span>
-          <button class="slot-status-badge ${status}" onclick="cycleSlotStatus('${day.id}','${slot}')">${label}</button>
-        </div>
-        ${text
-          ? `<div class="slot-text">${escHtml(text)}</div>`
-          : `<div class="slot-empty">Nothing planned</div>`}
+      <div class="tl-row">
+        <button class="tl-dot ${status}" title="${status.replace('_', ' ')}" onclick="cycleSlotStatus('${day.id}','${slot}')"></button>
+        <span class="tl-icon">${SLOT_ICONS[slot]}</span>
+        <span class="tl-text">${escHtml(stripUrls(day[slot]))}</span>
       </div>`;
   }).join('');
-
-  const accomHtml = day.accommodation ? `
-    <div class="day-accom ${accomChanged ? 'changed' : 'same'}">
-      🏨 ${escHtml(day.accommodation)}${day.accommodation_city ? ', ' + escHtml(day.accommodation_city) : ''}
-    </div>` : '';
+  ((day.notes || '').match(URL_RE) || []).forEach(u => urls.push(u));
+  const noteText = stripUrls(day.notes);
 
   const card = document.createElement('div');
   card.className = 'day-card';
   card.innerHTML = `
     <div class="day-header">
+      <span class="day-date"><span class="day-dow">${dow}</span> ${date}</span>
       <span class="day-label">Day ${day.day_number}</span>
-      <span class="day-date">${dayName}</span>
+      <button class="day-edit" onclick="openDayEdit('${day.id}')" aria-label="Edit day">✎</button>
     </div>
-    ${slotsHtml}
-    ${accomHtml}`;
+    ${day.accommodation && accomChanged ? `<div class="day-accom">🏨 ${escHtml(day.accommodation)}${day.accommodation_city ? ' · ' + escHtml(day.accommodation_city) : ''}${nights > 1 ? ` <span class="day-nights">${nights} nights</span>` : ''}</div>` : ''}
+    ${rows || `<div class="tl-empty">Nothing planned yet</div>`}
+    ${noteText ? `<div class="day-note">${escHtml(noteText)}</div>` : ''}
+    ${urls.length ? `<div class="day-links">${[...new Set(urls)].map(linkChip).join('')}</div>` : ''}`;
   return card;
 }
 
@@ -355,6 +368,43 @@ async function cycleSlotStatus(dayId, slot) {
   const next  = cycle[(cycle.indexOf(day[`${slot}_status`] || 'free') + 1) % 3];
   await db.from('holiday_days').update({ [`${slot}_status`]: next }).eq('id', dayId);
   day[`${slot}_status`] = next;
+  renderPlan();
+}
+
+// ── EDIT DAY ──────────────────────────────────────────────────────────────────
+
+function openDayEdit(dayId) {
+  const day = state.days.find(d => d.id === dayId);
+  if (!day) return;
+  state.editDayId = dayId;
+  document.getElementById('day-edit-title').textContent =
+    new Date(day.day_date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  document.getElementById('de-accom').value = day.accommodation || '';
+  document.getElementById('de-city').value  = day.accommodation_city || '';
+  SLOT_SLOTS.forEach(s => { document.getElementById(`de-${s}`).value = day[s] || ''; });
+  document.getElementById('de-notes').value = day.notes || '';
+  openModal('modal-day-edit');
+}
+
+async function saveDayEdit() {
+  const day = state.days.find(d => d.id === state.editDayId);
+  if (!day) return;
+  const patch = {
+    accommodation:      document.getElementById('de-accom').value.trim() || null,
+    accommodation_city: document.getElementById('de-city').value.trim()  || null,
+    notes:              document.getElementById('de-notes').value.trim() || null,
+  };
+  SLOT_SLOTS.forEach(s => {
+    const v = document.getElementById(`de-${s}`).value.trim() || null;
+    patch[s] = v;
+    // a slot that gets text for the first time starts as "to book" until she says otherwise
+    if (v && !day[s] && (day[`${s}_status`] || 'free') === 'free') patch[`${s}_status`] = 'to_book';
+    if (!v) patch[`${s}_status`] = 'free';
+  });
+  const { error } = await db.from('holiday_days').update(patch).eq('id', day.id);
+  if (error) { alert('Could not save — ' + (error.message || 'are you online?')); return; }
+  Object.assign(day, patch);
+  closeModal('modal-day-edit');
   renderPlan();
 }
 
@@ -825,7 +875,7 @@ document.getElementById('back-btn').addEventListener('click', () => { location.h
 document.getElementById('fab-home').addEventListener('click', () => openModal('modal-add-holiday'));
 
 // Close modals on backdrop click
-['modal-add-holiday','modal-paste','modal-notes','modal-add-doc','modal-add-packing','modal-add-ancillary'].forEach(id => {
+['modal-add-holiday','modal-paste','modal-notes','modal-add-doc','modal-add-packing','modal-add-ancillary','modal-day-edit'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => { if (e.target.id === id) closeModal(id); });
 });
 
