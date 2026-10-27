@@ -81,3 +81,6 @@ create policy "allow all" on holiday_ancillaries for all using (true) with check
 -- 27 Oct 2026 (migrations/2026-10-27-packing-to-buy.sql): per-person lists
 alter table holiday_packing add column if not exists deleted boolean not null default false;
 alter table holiday_packing add column if not exists to_buy  boolean not null default false;
+
+-- 27 Oct 2026 (migrations/2026-10-27b-todo-waiting-on.sql): To-Do "waiting on"
+alter table holiday_ancillaries add column if not exists waiting_on text;

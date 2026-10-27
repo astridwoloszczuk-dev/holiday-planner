@@ -314,9 +314,15 @@ function renderPlan() {
 }
 
 // A day is one compact box: date, where we sleep (only when it changes), then
-// the filled slots as a timeline — a coloured dot per slot = its status (tap to
-// cycle), URLs in a slot or in the day notes become link chips at the foot
-// (a claude.ai artifact shows as "Artifact"). ✎ opens the day for editing.
+// its lines — free-form, one line per item, stored in holiday_days.notes:
+//   ✓ 09:30 Land at O.R. Tambo      → booked (green dot)
+//   ? Robberg Peninsula hike         → idea / to book (amber dot)
+//   Lunch somewhere on the N2        → plain (grey dot)
+// A leading time (09:30, ~16:00) becomes the label column. URLs anywhere become
+// link chips at the foot (a claude.ai link shows as "Artifact"). The dot cycles
+// plain → idea → booked. ✎ opens the day's text. Days parsed by the edge
+// function still arrive in the four slot columns; they are read as lines until
+// the day is first edited, which writes the lines and clears the slots.
 const URL_RE = /https?:\/\/[^\s<)]+/g;
 
 function linkChip(u) {
@@ -327,24 +333,43 @@ function linkChip(u) {
 
 function stripUrls(text) { return (text || '').replace(URL_RE, '').replace(/\s{2,}/g, ' ').trim(); }
 
+const STATUS_PREFIX = { planned: '✓ ', to_book: '? ', free: '' };
+
+function slotsToText(day) {
+  return SLOT_SLOTS.filter(s => day[s])
+    .map(s => (STATUS_PREFIX[day[`${s}_status`]] ?? '') + day[s]).join('\n');
+}
+function dayText(day) { return (day.notes && day.notes.trim()) ? day.notes : slotsToText(day); }
+
+function parseLine(line) {
+  let status = 'free', s = line.trim();
+  if (/^✓/.test(s))      { status = 'planned'; s = s.replace(/^✓\s*/, ''); }
+  else if (/^\?/.test(s)) { status = 'to_book'; s = s.replace(/^\?\s*/, ''); }
+  const tm = s.match(/^(~?\d{1,2}[:.]\d{2})\s+/);
+  const time = tm ? tm[1] : '';
+  if (tm) s = s.slice(tm[0].length);
+  return { status, time, text: s };
+}
+
 function buildDayCard(day, accomChanged, nights) {
   const d = new Date(day.day_date + 'T00:00:00');
   const dow  = d.toLocaleDateString('en-GB', { weekday: 'short' });
   const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
-  const urls = [];
-  const rows = SLOT_SLOTS.filter(s => day[s]).map(slot => {
-    const status = day[`${slot}_status`] || 'free';
-    (day[slot].match(URL_RE) || []).forEach(u => urls.push(u));
+  const lines = dayText(day).split('\n').map(l => l.trim()).filter(Boolean);
+  const urls  = [];
+  const rows  = lines.map((line, i) => {
+    const it = parseLine(line);
+    (it.text.match(URL_RE) || []).forEach(u => urls.push(u));
+    const text = stripUrls(it.text);
+    if (!text && urls.length) return '';           // a line that was only a link → chip only
     return `
       <div class="tl-row">
-        <button class="tl-dot ${status}" title="${status.replace('_', ' ')}" onclick="cycleSlotStatus('${day.id}','${slot}')"></button>
-        <span class="tl-icon">${SLOT_ICONS[slot]}</span>
-        <span class="tl-text">${escHtml(stripUrls(day[slot]))}</span>
+        <button class="tl-dot ${it.status}" title="${it.status.replace('_', ' ')}" onclick="cycleLine('${day.id}', ${i})"></button>
+        <span class="tl-time">${escHtml(it.time)}</span>
+        <span class="tl-text">${escHtml(text)}</span>
       </div>`;
   }).join('');
-  ((day.notes || '').match(URL_RE) || []).forEach(u => urls.push(u));
-  const noteText = stripUrls(day.notes);
 
   const card = document.createElement('div');
   card.className = 'day-card';
@@ -356,19 +381,27 @@ function buildDayCard(day, accomChanged, nights) {
     </div>
     ${day.accommodation && accomChanged ? `<div class="day-accom">🏨 ${escHtml(day.accommodation)}${day.accommodation_city ? ' · ' + escHtml(day.accommodation_city) : ''}${nights > 1 ? ` <span class="day-nights">${nights} nights</span>` : ''}</div>` : ''}
     ${rows || `<div class="tl-empty">Nothing planned yet</div>`}
-    ${noteText ? `<div class="day-note">${escHtml(noteText)}</div>` : ''}
     ${urls.length ? `<div class="day-links">${[...new Set(urls)].map(linkChip).join('')}</div>` : ''}`;
   return card;
 }
 
-async function cycleSlotStatus(dayId, slot) {
+async function saveDayText(day, text, extra = {}) {
+  const patch = { notes: text || null, ...extra };
+  SLOT_SLOTS.forEach(s => { patch[s] = null; patch[`${s}_status`] = 'free'; });
+  const { error } = await db.from('holiday_days').update(patch).eq('id', day.id);
+  if (error) { alert('Could not save — ' + (error.message || 'are you online?')); return false; }
+  Object.assign(day, patch);
+  return true;
+}
+
+async function cycleLine(dayId, idx) {
   const day = state.days.find(d => d.id === dayId);
   if (!day) return;
-  const cycle = ['free', 'to_book', 'planned'];
-  const next  = cycle[(cycle.indexOf(day[`${slot}_status`] || 'free') + 1) % 3];
-  await db.from('holiday_days').update({ [`${slot}_status`]: next }).eq('id', dayId);
-  day[`${slot}_status`] = next;
-  renderPlan();
+  const lines = dayText(day).split('\n').map(l => l.trim()).filter(Boolean);
+  const it = parseLine(lines[idx]);
+  const next = { free: 'to_book', to_book: 'planned', planned: 'free' }[it.status];
+  lines[idx] = STATUS_PREFIX[next] + (it.time ? it.time + ' ' : '') + it.text;
+  if (await saveDayText(day, lines.join('\n'))) renderPlan();
 }
 
 // ── EDIT DAY ──────────────────────────────────────────────────────────────────
@@ -381,29 +414,19 @@ function openDayEdit(dayId) {
     new Date(day.day_date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   document.getElementById('de-accom').value = day.accommodation || '';
   document.getElementById('de-city').value  = day.accommodation_city || '';
-  SLOT_SLOTS.forEach(s => { document.getElementById(`de-${s}`).value = day[s] || ''; });
-  document.getElementById('de-notes').value = day.notes || '';
+  document.getElementById('de-lines').value = dayText(day);
   openModal('modal-day-edit');
 }
 
 async function saveDayEdit() {
   const day = state.days.find(d => d.id === state.editDayId);
   if (!day) return;
-  const patch = {
+  const text = document.getElementById('de-lines').value.split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+  const ok = await saveDayText(day, text, {
     accommodation:      document.getElementById('de-accom').value.trim() || null,
     accommodation_city: document.getElementById('de-city').value.trim()  || null,
-    notes:              document.getElementById('de-notes').value.trim() || null,
-  };
-  SLOT_SLOTS.forEach(s => {
-    const v = document.getElementById(`de-${s}`).value.trim() || null;
-    patch[s] = v;
-    // a slot that gets text for the first time starts as "to book" until she says otherwise
-    if (v && !day[s] && (day[`${s}_status`] || 'free') === 'free') patch[`${s}_status`] = 'to_book';
-    if (!v) patch[`${s}_status`] = 'free';
   });
-  const { error } = await db.from('holiday_days').update(patch).eq('id', day.id);
-  if (error) { alert('Could not save — ' + (error.message || 'are you online?')); return; }
-  Object.assign(day, patch);
+  if (!ok) return;
   closeModal('modal-day-edit');
   renderPlan();
 }
@@ -638,62 +661,69 @@ const togglePacking = id => patchPacking(id, { checked: !state.packing.find(p =>
 const setToBuy      = (id, v) => patchPacking(id, { to_buy: v });
 const setDeleted    = (id, v) => patchPacking(id, { deleted: v });
 
+// Who gets the items: chips for Shared + each person, with Everyone / Kids
+// shortcuts — one row per ticked person, so she posts a list once.
+const KIDS = ['Max', 'Alex', 'Vicky'];
 function openPackingAdd() {
-  const sel = document.getElementById('pack-person');
-  sel.value = state.packPerson === 'buy' ? 'all' : state.packPerson;
+  const wrap = document.getElementById('pack-people');
+  const preset = state.packPerson === 'buy' ? [] : [state.packPerson];
+  wrap.innerHTML = [['all', 'Shared'], ...PEOPLE.map(p => [p, p])].map(([id, label]) =>
+    `<button type="button" class="chip ${preset.includes(id) ? 'active' : ''}" data-p="${id}" onclick="this.classList.toggle('active')">${label}</button>`
+  ).join('') + `<button type="button" class="chip ghost" onclick="pickPeople(PEOPLE)">Everyone</button>` +
+               `<button type="button" class="chip ghost" onclick="pickPeople(KIDS)">Kids</button>`;
   openModal('modal-add-packing');
+}
+function pickPeople(list) {
+  document.querySelectorAll('#pack-people .chip[data-p]').forEach(b => b.classList.toggle('active', list.includes(b.dataset.p)));
 }
 
 // One item per line, into the list of the person chosen in the modal.
 async function savePacking() {
   const lines    = document.getElementById('pack-items').value.split('\n').map(s => s.trim()).filter(Boolean);
   const category = document.getElementById('pack-category').value;
-  const person   = document.getElementById('pack-person').value;
+  const people   = [...document.querySelectorAll('#pack-people .chip.active[data-p]')].map(b => b.dataset.p);
   if (!lines.length) return;
+  if (!people.length) { alert('Tick at least one person.'); return; }
 
-  const rows = lines.map(item => ({
+  const rows = people.flatMap(person => lines.map(item => ({
     holiday_id: state.holidayId, item, category, person,
     reason: null, is_obvious: true, checked: false, ai_generated: false, to_buy: false, deleted: false,
-  }));
+  })));
   const { data, error } = await db.from('holiday_packing').insert(rows).select();
   if (error) { alert('Could not save — ' + (error.message || 'are you online?')); return; }
 
   state.packing.push(...data);
   closeModal('modal-add-packing');
   document.getElementById('pack-items').value = '';
-  setPackPerson(person);
+  setPackPerson(people.includes(state.packPerson) ? state.packPerson : people[0]);
 }
 
 // ── TO-DO TAB ─────────────────────────────────────────────────────────────────
 
 function renderTodo() {
   const panel = document.getElementById('panel-todo');
-  const toBook      = state.ancillaries.filter(a => a.status === 'to_book');
-  const considering = state.ancillaries.filter(a => a.status === 'considering');
-  const booked      = state.ancillaries.filter(a => a.status === 'booked');
-
+  const groups = [
+    ['to_book',     '⚠️ Still to book', 'urgent'],
+    ['waiting',     '⏳ Waiting on someone', ''],
+    ['considering', '🤔 Considering', ''],
+    ['booked',      '✅ Booked', ''],
+  ];
   let html = `<div style="margin-bottom:4px"><button class="fab-inline" onclick="openModal('modal-add-ancillary')">+ Add item</button></div>`;
-
   if (!state.ancillaries.length) {
     html += `<div class="empty-state small"><p>Nothing to track yet — add restaurants, activities, transfers…</p></div>`;
   } else {
-    if (toBook.length) {
-      html += `<div class="section-label urgent">⚠️ Still to book</div>`;
-      toBook.forEach(a => { html += ancillaryCard(a); });
-    }
-    if (considering.length) {
-      html += `<div class="section-label">🤔 Considering</div>`;
-      considering.forEach(a => { html += ancillaryCard(a); });
-    }
-    if (booked.length) {
-      html += `<div class="section-label">✅ Booked</div>`;
-      booked.forEach(a => { html += ancillaryCard(a); });
-    }
+    groups.forEach(([status, label, cls]) => {
+      const items = state.ancillaries.filter(a => a.status === status);
+      if (!items.length) return;
+      html += `<div class="section-label ${cls}">${label}</div>`;
+      items.forEach(a => { html += ancillaryCard(a); });
+    });
   }
   panel.innerHTML = html;
 }
 
 function ancillaryCard(a) {
+  const waiting = a.status === 'waiting';
   return `
     <div class="list-card">
       <div class="card-main">
@@ -702,10 +732,14 @@ function ancillaryCard(a) {
           <div class="card-title">${escHtml(a.name)}</div>
           ${a.day_date ? `<div class="card-meta">${formatDate(a.day_date)}</div>` : ''}
           ${a.notes    ? `<div class="card-meta">${escHtml(a.notes)}</div>` : ''}
+          ${waiting ? `<div class="card-meta waiting">⏳ Waiting on
+              <input class="who-input" placeholder="whom?" value="${escHtml(a.waiting_on || '')}"
+                     onchange="setWaitingOn('${a.id}', this.value)"></div>` : ''}
         </div>
         <div class="card-actions">
           <select class="status-select" onchange="updateAncillaryStatus('${a.id}',this.value)">
             <option value="to_book"     ${a.status==='to_book'    ?'selected':''}>To book</option>
+            <option value="waiting"     ${waiting                 ?'selected':''}>Waiting on…</option>
             <option value="considering" ${a.status==='considering'?'selected':''}>Considering</option>
             <option value="booked"      ${a.status==='booked'     ?'selected':''}>Booked ✅</option>
           </select>
@@ -715,11 +749,17 @@ function ancillaryCard(a) {
     </div>`;
 }
 
-async function updateAncillaryStatus(id, status) {
-  await db.from('holiday_ancillaries').update({ status }).eq('id', id);
+async function patchAncillary(id, patch) {
   const a = state.ancillaries.find(a => a.id === id);
-  if (a) { a.status = status; renderTodo(); }
+  if (!a) return;
+  const { error } = await db.from('holiday_ancillaries').update(patch).eq('id', id);
+  if (error) { alert('Could not save — ' + (error.message || 'are you online?')); return; }
+  Object.assign(a, patch);
+  renderTodo();
+  if (patch.status === 'waiting' && !a.waiting_on) document.querySelector('.who-input')?.focus();
 }
+const updateAncillaryStatus = (id, status) => patchAncillary(id, { status });
+const setWaitingOn          = (id, who)    => patchAncillary(id, { waiting_on: who.trim() || null });
 
 async function deleteAncillary(id) {
   await db.from('holiday_ancillaries').delete().eq('id', id);
@@ -728,24 +768,25 @@ async function deleteAncillary(id) {
 }
 
 async function saveAncillary() {
-  const name     = document.getElementById('anc-name').value.trim();
-  const type     = document.getElementById('anc-type').value;
-  const day_date = document.getElementById('anc-date').value;
-  const status   = document.getElementById('anc-status').value;
-  const notes    = document.getElementById('anc-notes').value.trim();
+  const name       = document.getElementById('anc-name').value.trim();
+  const type       = document.getElementById('anc-type').value;
+  const day_date   = document.getElementById('anc-date').value;
+  const status     = document.getElementById('anc-status').value;
+  const notes      = document.getElementById('anc-notes').value.trim();
+  const waiting_on = document.getElementById('anc-waiting-on').value.trim();
   if (!name) return;
 
-  const { data } = await db.from('holiday_ancillaries').insert({
+  const { data, error } = await db.from('holiday_ancillaries').insert({
     holiday_id: state.holidayId, name, type,
     day_date: day_date || null, status, notes: notes || null,
+    waiting_on: status === 'waiting' && waiting_on ? waiting_on : null,
   }).select().single();
+  if (error) { alert('Could not save — ' + (error.message || 'are you online?')); return; }
 
-  if (data) {
-    state.ancillaries.push(data);
-    renderTodo();
-    closeModal('modal-add-ancillary');
-    ['anc-name','anc-notes','anc-date'].forEach(id => { document.getElementById(id).value = ''; });
-  }
+  state.ancillaries.push(data);
+  renderTodo();
+  closeModal('modal-add-ancillary');
+  ['anc-name','anc-notes','anc-date','anc-waiting-on'].forEach(id => { document.getElementById(id).value = ''; });
 }
 
 // ── WEATHER TAB ───────────────────────────────────────────────────────────────
