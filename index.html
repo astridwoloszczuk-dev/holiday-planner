@@ -263,7 +263,6 @@
       transition: opacity .15s;
       animation: slideIn .12s ease;
     }
-    .packing-card.non-obvious { border-left: 3px solid var(--amber); }
     .packing-card.checked { opacity: .5; }
 
     .check-circle {
@@ -280,8 +279,35 @@
     .packing-info { flex: 1; min-width: 0; }
     .packing-name { font-size: .9rem; font-weight: 500; display: block; }
     .packing-name.strikethrough { text-decoration: line-through; color: var(--gray-400); }
-    .packing-reason { font-size: .75rem; color: var(--amber); display: block; margin-top: 2px; font-style: italic; }
-    .packing-person { font-size: .68rem; color: var(--gray-400); display: block; margin-top: 2px; }
+
+    .packing-card.to-buy { border-left: 3px solid var(--amber); }
+    .packing-card.removed { opacity: .6; }
+    .packing-buy { font-size: .72rem; color: var(--amber); display: block; margin-top: 2px; }
+    .icon-btn {
+      border: 1.5px solid var(--gray-200); background: white; border-radius: 8px;
+      font-size: .85rem; line-height: 1; padding: 5px 7px; cursor: pointer; color: var(--gray-600);
+      flex-shrink: 0;
+    }
+    .icon-btn.active { background: var(--amber-lt); border-color: var(--amber); }
+    .pill-btn {
+      border: 1.5px solid var(--gray-200); background: white; border-radius: 999px;
+      font-size: .75rem; font-weight: 600; padding: 5px 10px; cursor: pointer;
+      color: var(--blue); font-family: inherit; flex-shrink: 0; white-space: nowrap;
+    }
+    .chip-row { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
+    .chip-row::-webkit-scrollbar { display: none; }
+    .chip {
+      border: 1.5px solid var(--gray-200); background: white; border-radius: 999px;
+      font-size: .8rem; font-weight: 600; padding: 6px 12px; cursor: pointer;
+      color: var(--gray-600); font-family: inherit; white-space: nowrap; flex-shrink: 0;
+    }
+    .chip.active { background: var(--blue); border-color: var(--blue); color: white; }
+    .chip.buy { border-color: var(--amber); color: var(--amber); }
+    .chip.buy.active { background: var(--amber); color: white; }
+    .pack-progress { font-size: .8rem; color: var(--gray-400); align-self: center; }
+    .pack-hint { font-size: .8rem; color: var(--gray-600); margin-bottom: 10px; }
+    .removed-group { margin-top: 14px; }
+    .removed-group summary { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--gray-400); cursor: pointer; padding: 6px 0; }
 
     /* ── Weather ── */
     .weather-location {
@@ -547,7 +573,7 @@
         <div class="field">
           <label>For</label>
           <select id="doc-person">
-            <option value="all">Everyone</option>
+            <option value="all">Shared (household)</option>
             <option>Astrid</option>
             <option>Niko</option>
             <option>Max</option>
@@ -596,7 +622,7 @@
         <div class="field">
           <label>For</label>
           <select id="pack-person">
-            <option value="all">Everyone</option>
+            <option value="all">Shared (household)</option>
             <option>Astrid</option>
             <option>Niko</option>
             <option>Max</option>

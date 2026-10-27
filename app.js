@@ -212,7 +212,7 @@ async function showDetail(id) {
     db.from('holidays').select('*').eq('id', id).single(),
     db.from('holiday_days').select('*').eq('holiday_id', id).order('day_date'),
     db.from('holiday_documents').select('*').eq('holiday_id', id),
-    db.from('holiday_packing').select('*').eq('holiday_id', id).order('category'),
+    db.from('holiday_packing').select('*').eq('holiday_id', id).order('category').order('item'),
     db.from('holiday_ancillaries').select('*').eq('holiday_id', id).order('day_date', { nullsFirst: false }),
   ]);
 
@@ -489,53 +489,75 @@ async function saveDoc() {
 }
 
 // ── PACKING TAB ───────────────────────────────────────────────────────────────
+// One list per person (plus "Shared" for household things). Each person ticks
+// what is packed, adds what is missing from the list, marks what they do not own
+// (🛒 → the To-buy view = the shopping list) and removes what does not apply —
+// a removed item stays visible under "Removed" so it can be brought back.
+// Lists come from Astrid or from Claude in a session, never generated here.
+
+const PACK_LS_KEY = 'hp-pack-person';
+state.packPerson = (() => { try { return localStorage.getItem(PACK_LS_KEY) || 'Astrid'; } catch { return 'Astrid'; } })();
+
+function setPackPerson(p) {
+  state.packPerson = p;
+  try { localStorage.setItem(PACK_LS_KEY, p); } catch {}
+  renderPacking();
+}
 
 function renderPacking() {
   const panel = document.getElementById('panel-packing');
-  const aiItems  = state.packing.filter(p => p.ai_generated);
-  const manItems = state.packing.filter(p => !p.ai_generated);
+  const live  = state.packing.filter(p => !p.deleted);
+  const toBuy = live.filter(p => p.to_buy);
+  const who   = state.packPerson;
 
-  const byCat = {};
-  aiItems.forEach(item => {
-    if (!byCat[item.category]) byCat[item.category] = [];
-    byCat[item.category].push(item);
-  });
+  const chips = [...PEOPLE.map(p => [p, p]), ['all', 'Shared'], ['buy', `🛒 To buy${toBuy.length ? ' ' + toBuy.length : ''}`]];
+  let html = `<div class="chip-row">${chips.map(([id, label]) =>
+    `<button class="chip ${who === id ? 'active' : ''} ${id === 'buy' && toBuy.length ? 'buy' : ''}" onclick="setPackPerson('${id}')">${label}</button>`).join('')}</div>`;
 
-  let html = `
+  if (who === 'buy') {
+    html += `<p class="pack-hint">Everything anyone marked 🛒 as not owned. Tap “Got it” once bought.</p>`;
+    if (!toBuy.length) html += `<div class="empty-state small"><p>Nothing to buy.</p></div>`;
+    ['all', ...PEOPLE].forEach(person => {
+      const items = toBuy.filter(p => (p.person || 'all') === person);
+      if (!items.length) return;
+      html += `<div class="section-label">${person === 'all' ? 'Shared' : person}</div>`;
+      items.forEach(item => { html += `
+        <div class="packing-card">
+          <div class="packing-info"><span class="packing-name">${escHtml(item.item)}</span></div>
+          <button class="pill-btn" onclick="setToBuy('${item.id}', false)">Got it ✓</button>
+        </div>`; });
+    });
+    panel.innerHTML = html;
+    return;
+  }
+
+  const mine    = live.filter(p => (p.person || 'all') === who);
+  const removed = state.packing.filter(p => p.deleted && (p.person || 'all') === who);
+  const done    = mine.filter(p => p.checked).length;
+
+  html += `
     <div class="packing-actions">
-      <button class="btn-primary" onclick="generatePacking()">✨ ${aiItems.length ? 'Refresh' : 'Generate'} packing list</button>
-      <button class="btn-secondary" onclick="openModal('modal-add-packing')">+ Add item</button>
+      <button class="btn-primary" onclick="openPackingAdd()">+ Add items</button>
+      <span class="pack-progress">${mine.length ? `${done}/${mine.length} packed` : ''}</span>
     </div>`;
 
-  if (!state.packing.length) {
-    html += `<div class="empty-state small"><p>Generate a packing list with Claude, or add items manually</p></div>`;
-  } else {
-    const nonObvious = aiItems.filter(p => !p.is_obvious);
-    if (nonObvious.length) {
-      html += `<div class="section-label highlight">💡 Don't forget</div>`;
-      nonObvious.forEach(item => { html += packingCard(item); });
-    }
+  if (!mine.length && !removed.length) {
+    html += `<div class="empty-state small"><p>No list for ${who === 'all' ? 'shared items' : who} yet — add items, or ask Claude for a starter list.</p></div>`;
+  }
 
-    Object.entries(byCat).forEach(([cat, items]) => {
-      const obvious = items.filter(p => p.is_obvious);
-      if (!obvious.length) return;
-      html += `<div class="section-label">${CAT_EMOJIS[cat] || '📦'} ${cat.charAt(0).toUpperCase() + cat.slice(1)}</div>`;
-      obvious.forEach(item => { html += packingCard(item); });
-    });
+  const byCat = {};
+  mine.forEach(item => { (byCat[item.category] = byCat[item.category] || []).push(item); });
+  Object.keys(CAT_EMOJIS).filter(c => byCat[c]).concat(Object.keys(byCat).filter(c => !CAT_EMOJIS[c])).forEach(cat => {
+    html += `<div class="section-label">${CAT_EMOJIS[cat] || '📦'} ${cat.charAt(0).toUpperCase() + cat.slice(1)}</div>`;
+    byCat[cat].forEach(item => { html += packingCard(item); });
+  });
 
-    // Your own list, grouped by person so each child can tick their own
-    const byPerson = {};
-    manItems.forEach(item => {
-      const key = item.person || 'all';
-      (byPerson[key] = byPerson[key] || []).push(item);
-    });
-    ['all', ...PEOPLE.filter(p => byPerson[p])].forEach(person => {
-      const items = byPerson[person];
-      if (!items) return;
-      const done = items.filter(i => i.checked).length;
-      html += `<div class="section-label">${person === 'all' ? '👨‍👩‍👧‍👦 Everyone' : '🙋 ' + person} <span class="section-count">${done}/${items.length}</span></div>`;
-      items.forEach(item => { html += packingCard(item); });
-    });
+  if (removed.length) {
+    html += `<details class="removed-group"><summary>Removed (${removed.length})</summary>${removed.map(item => `
+      <div class="packing-card removed">
+        <div class="packing-info"><span class="packing-name strikethrough">${escHtml(item.item)}</span></div>
+        <button class="pill-btn" onclick="setDeleted('${item.id}', false)">Bring back</button>
+      </div>`).join('')}</details>`;
   }
 
   panel.innerHTML = html;
@@ -543,59 +565,36 @@ function renderPacking() {
 
 function packingCard(item) {
   return `
-    <div class="packing-card ${item.checked ? 'checked' : ''} ${!item.is_obvious ? 'non-obvious' : ''}">
-      <button class="check-circle ${item.checked ? 'done' : ''}" onclick="togglePacking('${item.id}')">
-        ${item.checked ? '✓' : ''}
-      </button>
+    <div class="packing-card ${item.checked ? 'checked' : ''} ${item.to_buy ? 'to-buy' : ''}">
+      <button class="check-circle ${item.checked ? 'done' : ''}" onclick="togglePacking('${item.id}')">${item.checked ? '✓' : ''}</button>
       <div class="packing-info">
         <span class="packing-name ${item.checked ? 'strikethrough' : ''}">${escHtml(item.item)}</span>
-        ${item.reason ? `<span class="packing-reason">${escHtml(item.reason)}</span>` : ''}
-        ${item.person && item.person !== 'all' ? `<span class="packing-person">For ${item.person}</span>` : ''}
+        ${item.to_buy ? `<span class="packing-buy">🛒 not owned — on the shopping list</span>` : ''}
       </div>
-      <button class="del-btn-sm" onclick="deletePackingItem('${item.id}')">🗑</button>
+      <button class="icon-btn ${item.to_buy ? 'active' : ''}" title="Don't own it" onclick="setToBuy('${item.id}', ${!item.to_buy})">🛒</button>
+      <button class="icon-btn" title="Remove from my list" onclick="setDeleted('${item.id}', true)">✕</button>
     </div>`;
 }
 
-async function togglePacking(id) {
+async function patchPacking(id, patch) {
   const item = state.packing.find(p => p.id === id);
   if (!item) return;
-  const checked = !item.checked;
-  await db.from('holiday_packing').update({ checked }).eq('id', id);
-  item.checked = checked;
+  const { error } = await db.from('holiday_packing').update(patch).eq('id', id);
+  if (error) { alert('Could not save — ' + (error.message || 'are you online?')); return; }
+  Object.assign(item, patch);
   renderPacking();
 }
+const togglePacking = id => patchPacking(id, { checked: !state.packing.find(p => p.id === id)?.checked });
+const setToBuy      = (id, v) => patchPacking(id, { to_buy: v });
+const setDeleted    = (id, v) => patchPacking(id, { deleted: v });
 
-async function deletePackingItem(id) {
-  await db.from('holiday_packing').delete().eq('id', id);
-  state.packing = state.packing.filter(p => p.id !== id);
-  renderPacking();
+function openPackingAdd() {
+  const sel = document.getElementById('pack-person');
+  sel.value = state.packPerson === 'buy' ? 'all' : state.packPerson;
+  openModal('modal-add-packing');
 }
 
-async function generatePacking() {
-  const btn = document.querySelector('.packing-actions .btn-primary');
-  btn.textContent = '✨ Generating…';
-  btn.disabled = true;
-
-  try {
-    const res = await fetch(EDGE_FN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON}` },
-      body: JSON.stringify({ action: 'generate_packing', holiday_id: state.holidayId }),
-    });
-    if (!res.ok) throw new Error();
-
-    const { data } = await db.from('holiday_packing').select('*').eq('holiday_id', state.holidayId).order('category');
-    state.packing = data || [];
-    renderPacking();
-  } catch {
-    alert('Could not generate packing list — please try again.');
-    btn.textContent = '✨ Generate packing list';
-    btn.disabled = false;
-  }
-}
-
-// One item per line. "For" = everyone or one person; the list is grouped by person,
-// so paste the ski list once per child and they tick what they have / what fits.
+// One item per line, into the list of the person chosen in the modal.
 async function savePacking() {
   const lines    = document.getElementById('pack-items').value.split('\n').map(s => s.trim()).filter(Boolean);
   const category = document.getElementById('pack-category').value;
@@ -603,16 +602,16 @@ async function savePacking() {
   if (!lines.length) return;
 
   const rows = lines.map(item => ({
-    holiday_id: state.holidayId, item, category,
-    reason: null, person, is_obvious: true, checked: false, ai_generated: false,
+    holiday_id: state.holidayId, item, category, person,
+    reason: null, is_obvious: true, checked: false, ai_generated: false, to_buy: false, deleted: false,
   }));
   const { data, error } = await db.from('holiday_packing').insert(rows).select();
-  if (error) { alert('Could not save — are you online?'); return; }
+  if (error) { alert('Could not save — ' + (error.message || 'are you online?')); return; }
 
   state.packing.push(...data);
-  renderPacking();
   closeModal('modal-add-packing');
   document.getElementById('pack-items').value = '';
+  setPackPerson(person);
 }
 
 // ── TO-DO TAB ─────────────────────────────────────────────────────────────────
