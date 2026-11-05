@@ -640,7 +640,7 @@ function packingCard(item) {
   return `
     <div class="packing-card ${item.checked ? 'checked' : ''} ${item.to_buy ? 'to-buy' : ''}">
       <button class="check-circle ${item.checked ? 'done' : ''}" onclick="togglePacking('${item.id}')">${item.checked ? '✓' : ''}</button>
-      <div class="packing-info">
+      <div class="packing-info editable" title="Tap to edit" onclick="openPackingEdit('${item.id}')">
         <span class="packing-name ${item.checked ? 'strikethrough' : ''}">${escHtml(item.item)}</span>
         ${item.to_buy ? `<span class="packing-buy">🛒 not owned — on the shopping list</span>` : ''}
       </div>
@@ -660,6 +660,23 @@ async function patchPacking(id, patch) {
 const togglePacking = id => patchPacking(id, { checked: !state.packing.find(p => p.id === id)?.checked });
 const setToBuy      = (id, v) => patchPacking(id, { to_buy: v });
 const setDeleted    = (id, v) => patchPacking(id, { deleted: v });
+
+// Tap an item's text → change its wording or category in place (keeps ticked / to-buy).
+function openPackingEdit(id) {
+  const item = state.packing.find(p => p.id === id);
+  if (!item) return;
+  state.packEditId = id;
+  document.getElementById('pack-edit-item').value = item.item;
+  document.getElementById('pack-edit-category').value = item.category || 'misc';
+  openModal('modal-edit-packing');
+  document.getElementById('pack-edit-item').focus();
+}
+async function savePackingEdit() {
+  const text = document.getElementById('pack-edit-item').value.trim();
+  if (!text) return;
+  closeModal('modal-edit-packing');
+  await patchPacking(state.packEditId, { item: text, category: document.getElementById('pack-edit-category').value });
+}
 
 // Who gets the items: chips for Shared + each person, with Everyone / Kids
 // shortcuts — one row per ticked person, so she posts a list once.
@@ -916,7 +933,7 @@ document.getElementById('back-btn').addEventListener('click', () => { location.h
 document.getElementById('fab-home').addEventListener('click', () => openModal('modal-add-holiday'));
 
 // Close modals on backdrop click
-['modal-add-holiday','modal-paste','modal-notes','modal-add-doc','modal-add-packing','modal-add-ancillary','modal-day-edit'].forEach(id => {
+['modal-add-holiday','modal-paste','modal-notes','modal-add-doc','modal-add-packing','modal-edit-packing','modal-add-ancillary','modal-day-edit'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => { if (e.target.id === id) closeModal(id); });
 });
 

@@ -271,6 +271,7 @@
     .check-circle:hover { border-color: var(--green); }
 
     .packing-info { flex: 1; min-width: 0; }
+    .packing-info.editable { cursor: pointer; }
     .packing-name { font-size: .9rem; font-weight: 500; display: block; }
     .packing-name.strikethrough { text-decoration: line-through; color: var(--gray-400); }
 
@@ -650,6 +651,34 @@
       <div class="modal-actions">
         <button class="modal-cancel" onclick="closeModal('modal-add-packing')">Cancel</button>
         <button class="modal-save"   onclick="savePacking()">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: Edit packing item ───────────────────────────────── -->
+  <div id="modal-edit-packing" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>🎒 Edit Item</h2>
+      <div class="field">
+        <label>Item</label>
+        <input id="pack-edit-item" type="text" onkeydown="if (event.key === 'Enter') savePackingEdit()">
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <select id="pack-edit-category">
+          <option value="clothing">👗 Clothing</option>
+          <option value="toiletries">🧴 Toiletries</option>
+          <option value="documents">📄 Documents</option>
+          <option value="gear">🎒 Gear</option>
+          <option value="beach">🏖️ Beach</option>
+          <option value="health">💊 Health</option>
+          <option value="kids">👧 Kids</option>
+          <option value="misc">📦 Misc</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-cancel" onclick="closeModal('modal-edit-packing')">Cancel</button>
+        <button class="modal-save"   onclick="savePackingEdit()">Save</button>
       </div>
     </div>
   </div>
