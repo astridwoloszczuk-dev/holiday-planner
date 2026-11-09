@@ -249,6 +249,19 @@
     /* ── Packing cards ── */
     .packing-actions { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 
+    /* ── Wish button (everyone) ── */
+    .wish-btn {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+      width: 100%; text-align: left;
+      background: var(--amber-lt, #fef3c7); color: #92400e;
+      border: 1.5px dashed #f59e0b; border-radius: 14px;
+      padding: 14px 16px; margin-bottom: 12px;
+      font-size: 1rem; font-weight: 700; font-family: inherit; cursor: pointer;
+      transition: background .15s;
+    }
+    .wish-btn:hover { background: #fde68a; }
+    .wish-btn small { font-size: .75rem; font-weight: 500; opacity: .8; }
+
     .packing-card {
       background: white; border-radius: 12px;
       margin-bottom: 6px; padding: 10px 12px;
@@ -572,6 +585,29 @@
       <div class="modal-actions">
         <button class="modal-cancel" onclick="closeModal('modal-day-edit')">Cancel</button>
         <button class="modal-save"   onclick="saveDayEdit()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: Wish / idea ─────────────────────────────────────── -->
+  <div id="modal-wish" class="modal-backdrop hidden">
+    <div class="modal">
+      <h2>💡 A wish or an idea</h2>
+      <div class="field">
+        <label>Whose idea?</label>
+        <div id="wish-people" class="chip-row wrap"></div>
+      </div>
+      <div class="field">
+        <label>What</label>
+        <input id="wish-text" type="text" placeholder="e.g. Night sledging · Pizza at …" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label>Why / link (optional)</label>
+        <input id="wish-note" type="text" placeholder="a sentence or a URL" autocomplete="off" />
+      </div>
+      <div class="modal-actions">
+        <button class="modal-cancel" onclick="closeModal('modal-wish')">Cancel</button>
+        <button class="modal-save"   onclick="saveWish()">Add</button>
       </div>
     </div>
   </div>

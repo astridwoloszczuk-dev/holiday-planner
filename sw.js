@@ -1,4 +1,4 @@
-const CACHE = 'holidays-v4';
+const CACHE = 'holidays-v5';
 const SHELL = ['./', './app.js', 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js'];
 
 self.addEventListener('install', e => {

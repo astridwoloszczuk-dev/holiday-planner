@@ -8,6 +8,16 @@ const SLOT_ICONS = { morning: '🌅', lunch: '🍽️', afternoon: '☀️', eve
 const CAT_EMOJIS = { clothing: '👗', toiletries: '🧴', documents: '📄', gear: '🎒', beach: '🏖️', health: '💊', kids: '👧', misc: '📦' };
 const ANC_ICONS  = { restaurant: '🍽️', activity: '🎯', spa: '💆', transfer: '🚗', hotel: '🏨', flight: '✈️', other: '📌' };
 const PEOPLE     = ['Astrid', 'Niko', 'Max', 'Alex', 'Vicky'];
+// Only Astrid's devices get the full "add" controls (packing items, To-Dos, re-paste).
+// Opened once with ?me=1 the flag sticks in localStorage; ?me=0 removes it.
+const ME = (() => {
+  try {
+    const q = new URLSearchParams(location.search).get('me');
+    if (q === '1') localStorage.setItem('hp-me', '1');
+    if (q === '0') localStorage.removeItem('hp-me');
+    return localStorage.getItem('hp-me') === '1';
+  } catch { return false; }
+})();
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const { createClient } = supabase;
@@ -297,7 +307,7 @@ function renderPlan() {
 
   panel.innerHTML = infoHtml + `
     <div class="plan-actions">
-      <button class="btn-secondary" onclick="openModal('modal-paste')">Re-paste itinerary</button>
+      ${ME ? `<button class="btn-secondary" onclick="openModal('modal-paste')">Re-paste itinerary</button>` : ''}
       <span class="plan-legend"><i class="tl-dot planned"></i> booked <i class="tl-dot to_book"></i> idea / to book</span>
     </div>
     <div id="day-cards"></div>`;
@@ -610,12 +620,12 @@ function renderPacking() {
 
   html += `
     <div class="packing-actions">
-      <button class="btn-primary" onclick="openPackingAdd()">+ Add items</button>
+      ${ME ? `<button class="btn-primary" onclick="openPackingAdd()">+ Add items</button>` : ''}
       <span class="pack-progress">${mine.length ? `${done}/${mine.length} packed` : ''}</span>
     </div>`;
 
   if (!mine.length && !removed.length) {
-    html += `<div class="empty-state small"><p>No list for ${who === 'all' ? 'shared items' : who} yet — add items, or ask Claude for a starter list.</p></div>`;
+    html += `<div class="empty-state small"><p>No list for ${who === 'all' ? 'shared items' : who} yet${ME ? ' — add items, or ask Claude for a starter list' : ''}.</p></div>`;
   }
 
   const byCat = {};
@@ -725,7 +735,9 @@ function renderTodo() {
     ['considering', '🤔 Considering', ''],
     ['booked',      '✅ Booked', ''],
   ];
-  let html = `<div style="margin-bottom:4px"><button class="fab-inline" onclick="openModal('modal-add-ancillary')">+ Add item</button></div>`;
+  let html = `
+    <button class="wish-btn" onclick="openWish()">💡 Add a wish or idea<small>restaurant, activity, anything — it lands under “Considering”</small></button>
+    ${ME ? `<div style="margin-bottom:4px"><button class="fab-inline" onclick="openModal('modal-add-ancillary')">+ Add To-Do</button></div>` : ''}`;
   if (!state.ancillaries.length) {
     html += `<div class="empty-state small"><p>Nothing to track yet — add restaurants, activities, transfers…</p></div>`;
   } else {
@@ -782,6 +794,36 @@ async function deleteAncillary(id) {
   await db.from('holiday_ancillaries').delete().eq('id', id);
   state.ancillaries = state.ancillaries.filter(a => a.id !== id);
   renderTodo();
+}
+
+// ── WISHES ─────────────────────────────────────────────────────────────────────
+// Anyone's idea → one "Considering" To-Do, tagged with who had it.
+function openWish() {
+  const wrap = document.getElementById('wish-people');
+  const preset = PEOPLE.includes(state.packPerson) ? state.packPerson : null;
+  wrap.innerHTML = PEOPLE.map(p =>
+    `<button type="button" class="chip ${p === preset ? 'active' : ''}" data-p="${p}" onclick="pickWisher(this)">${p}</button>`).join('');
+  openModal('modal-wish');
+  setTimeout(() => document.getElementById('wish-text').focus(), 50);
+}
+function pickWisher(btn) {
+  document.querySelectorAll('#wish-people .chip').forEach(b => b.classList.toggle('active', b === btn));
+}
+async function saveWish() {
+  const name = document.getElementById('wish-text').value.trim();
+  const note = document.getElementById('wish-note').value.trim();
+  const who  = document.querySelector('#wish-people .chip.active')?.dataset.p;
+  if (!name) return;
+  if (!who) { alert('Whose idea? Tap a name.'); return; }
+  const notes = `💡 ${who}` + (note ? ' — ' + note : '');
+  const { data, error } = await db.from('holiday_ancillaries').insert({
+    holiday_id: state.holidayId, name, type: 'activity', day_date: null, status: 'considering', notes, waiting_on: null,
+  }).select().single();
+  if (error) { alert('Could not save — ' + (error.message || 'are you online?')); return; }
+  state.ancillaries.push(data);
+  renderTodo();
+  closeModal('modal-wish');
+  ['wish-text', 'wish-note'].forEach(id => { document.getElementById(id).value = ''; });
 }
 
 async function saveAncillary() {
@@ -933,7 +975,7 @@ document.getElementById('back-btn').addEventListener('click', () => { location.h
 document.getElementById('fab-home').addEventListener('click', () => openModal('modal-add-holiday'));
 
 // Close modals on backdrop click
-['modal-add-holiday','modal-paste','modal-notes','modal-add-doc','modal-add-packing','modal-edit-packing','modal-add-ancillary','modal-day-edit'].forEach(id => {
+['modal-add-holiday','modal-paste','modal-notes','modal-add-doc','modal-add-packing','modal-edit-packing','modal-add-ancillary','modal-day-edit','modal-wish'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => { if (e.target.id === id) closeModal(id); });
 });
 
